@@ -4,6 +4,8 @@ Local-RAG lets you chat with your documents entirely offline. Simply upload your
 
 Please note: This is an early, functional prototype. It is a work in progress and not yet a polished, production-ready solution.
 
+![Local-RAG Preview](preview.png)
+
 ## Features
 
 - Ingest PDFs, DOCX, PPTX, XLSX, TXT and images (PNG, JPEG, TIFF, BMP, GIF).  
