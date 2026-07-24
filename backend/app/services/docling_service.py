@@ -84,12 +84,41 @@ class MarkdownChunker:
         self.min_content_length = min_content_length
 
     def chunk(self, markdown_text: str) -> list[MarkdownChunk]:
-        """Split markdown into semantic chunks."""
+        """Split markdown into semantic chunks.
+
+        ``min_content_length`` controls where we are willing to cut, not what
+        we keep: content below the threshold is carried forward and merged into
+        the next chunk rather than discarded, so no document text is ever lost.
+        """
         lines = markdown_text.splitlines()
         chunks: list[MarkdownChunk] = []
         current_heading_path: list[str] = []
         current_lines: list[str] = []
         current_length = 0
+        # Lines from a sub-threshold flush awaiting merge into the next chunk.
+        carryover_lines: list[str] = []
+
+        def flush(lines_to_flush: list[str]) -> None:
+            """Emit a chunk from ``lines_to_flush`` plus any pending carryover.
+
+            If the combined content is still below ``min_content_length`` it is
+            retained in ``carryover_lines`` (prepended to the next chunk) instead
+            of being dropped.
+            """
+            nonlocal carryover_lines
+            combined = carryover_lines + lines_to_flush
+            content = '\n'.join(combined).strip()
+            if not content:
+                return
+            if len(content) >= self.min_content_length:
+                chunks.append(MarkdownChunk(
+                    content=content,
+                    heading_path=current_heading_path.copy(),
+                    chunk_type=self._detect_type(combined),
+                ))
+                carryover_lines = []
+            else:
+                carryover_lines = combined
 
         i = 0
         while i < len(lines):
@@ -101,13 +130,7 @@ class MarkdownChunker:
             if heading_match:
                 # Save current chunk before switching headings
                 if current_lines:
-                    content = '\n'.join(current_lines).strip()
-                    if content and len(content) >= self.min_content_length:
-                        chunks.append(MarkdownChunk(
-                            content=content,
-                            heading_path=current_heading_path.copy(),
-                            chunk_type=self._detect_type(current_lines),
-                        ))
+                    flush(current_lines)
                     current_lines = []
                     current_length = 0
 
@@ -124,17 +147,11 @@ class MarkdownChunker:
                 i += 1
                 continue
 
-            # Detect tables (keep them atomic)
+            # Detect tables (kept whole, or split only on row boundaries)
             if stripped.startswith('|') and i + 1 < len(lines) and lines[i + 1].strip().startswith('|'):
                 # Save current chunk if it has content
                 if current_lines and current_length > 0:
-                    content = '\n'.join(current_lines).strip()
-                    if content and len(content) >= self.min_content_length:
-                        chunks.append(MarkdownChunk(
-                            content=content,
-                            heading_path=current_heading_path.copy(),
-                            chunk_type=self._detect_type(current_lines),
-                        ))
+                    flush(current_lines)
                     current_lines = []
                     current_length = 0
 
@@ -144,15 +161,19 @@ class MarkdownChunker:
                     table_lines.append(lines[i])
                     i += 1
 
-                table_text = '\n'.join(table_lines)
-
-                # Add table as a single chunk
-                if table_text:
+                # Emit the table, splitting oversized tables on row boundaries
+                # (repeating the header so each piece is self-describing) so a
+                # large table is not truncated by the embedder. Any carried-over
+                # content (e.g. a short preceding heading) rides on the first
+                # piece so it stays contiguous with the table it introduces.
+                for idx, group in enumerate(self._split_table(table_lines)):
+                    body = (carryover_lines + group) if idx == 0 else group
                     chunks.append(MarkdownChunk(
-                        content=table_text,
+                        content='\n'.join(body),
                         heading_path=current_heading_path.copy(),
                         chunk_type="table",
                     ))
+                carryover_lines = []
                 continue
 
             # Add regular line to current chunk
@@ -160,13 +181,7 @@ class MarkdownChunker:
                 line_length = len(line) + 1  # +1 for newline
                 if current_length + line_length > self.max_chars:
                     # Split at current boundary
-                    content = '\n'.join(current_lines).strip()
-                    if content and len(content) >= self.min_content_length:
-                        chunks.append(MarkdownChunk(
-                            content=content,
-                            heading_path=current_heading_path.copy(),
-                            chunk_type=self._detect_type(current_lines),
-                        ))
+                    flush(current_lines)
                     current_lines = [line]
                     current_length = len(line)
                 else:
@@ -180,15 +195,58 @@ class MarkdownChunker:
 
         # Don't forget the last chunk
         if current_lines:
-            content = '\n'.join(current_lines).strip()
-            if content and len(content) >= self.min_content_length:
+            flush(current_lines)
+
+        # Emit any trailing carryover so short tail content is never lost, even
+        # when there is no following chunk to merge it into.
+        if carryover_lines:
+            content = '\n'.join(carryover_lines).strip()
+            if content:
                 chunks.append(MarkdownChunk(
                     content=content,
                     heading_path=current_heading_path.copy(),
-                    chunk_type=self._detect_type(current_lines),
+                    chunk_type=self._detect_type(carryover_lines),
                 ))
 
         return chunks
+
+    def _split_table(self, table_lines: list[str]) -> list[list[str]]:
+        """Split a markdown table into row-groups that each fit ``max_chars``.
+
+        The header row (and its separator, if present) is repeated at the top of
+        every group so each piece is a valid, self-describing table. Rows are
+        never split; a single row wider than ``max_chars`` is kept whole.
+        Tables that already fit are returned unchanged as a single group.
+        """
+        header = table_lines[:1]
+        rows = table_lines[1:]
+        if rows and self._is_separator_row(rows[0]):
+            header = table_lines[:2]
+            rows = table_lines[2:]
+
+        header_len = sum(len(line) + 1 for line in header)
+        groups: list[list[str]] = []
+        current: list[str] = []
+        current_len = header_len
+        for row in rows:
+            row_len = len(row) + 1
+            if current and current_len + row_len > self.max_chars:
+                groups.append(header + current)
+                current = [row]
+                current_len = header_len + row_len
+            else:
+                current.append(row)
+                current_len += row_len
+        if current:
+            groups.append(header + current)
+        # A header-only table (no data rows) still gets emitted.
+        return groups or [list(table_lines)]
+
+    @staticmethod
+    def _is_separator_row(line: str) -> bool:
+        """True for a markdown header separator like ``|---|:--:|``."""
+        cells = [c.strip() for c in line.strip().strip('|').split('|')]
+        return bool(cells) and all(c and set(c) <= set(':- ') and '-' in c for c in cells)
 
     @staticmethod
     def _detect_type(lines: list[str]) -> str:
@@ -222,7 +280,7 @@ class DoclingService:
         try:
             if file_path.suffix.lower() == ".txt":
                 dl_doc = await self._parse_text_file(file_path)
-                markdown_text = self._doc_to_markdown(dl_doc)
+                markdown_text = dl_doc.export_to_markdown()
             else:
                 result = await asyncio.to_thread(self.converter.convert, file_path)
                 dl_doc = result.document
@@ -252,11 +310,6 @@ class DoclingService:
                 "content": MarkdownChunker.contextualize(chunk),
             })
         return chunks
-
-    @staticmethod
-    def _doc_to_markdown(dl_doc: DoclingDocument) -> str:
-        """Convert a DoclingDocument to markdown text."""
-        return dl_doc.export_to_markdown()
 
     async def _parse_text_file(self, file_path: Path) -> DoclingDocument:
         content = await asyncio.to_thread(file_path.read_text, encoding="utf-8")

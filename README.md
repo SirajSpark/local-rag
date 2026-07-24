@@ -1,37 +1,39 @@
-## Overview
+# Local-RAG
 
-Local-RAG lets you chat with your documents entirely offline. Simply upload your files, and the system will automatically prepare and index them so you can start asking questions right away. Because everything from embeddings to retrieval runs locally on your machine, your data remains completely private. Every answer includes direct citations to help you easily verify the original source material.
+**Chat with your documents, entirely offline.**
 
-Please note: This is an early, functional prototype. It is a work in progress and not yet a polished, production-ready solution.
+Local-RAG lets you upload files and ask questions about them. The system automatically prepares and indexes your documents so you can start asking right away. Because everything — from embeddings to retrieval to LLM inference — runs locally on your machine, your data never leaves it. Every answer includes inline citations so you can verify it against the source.
+
+> **Status:** Early, functional prototype. It works, but it's a work in progress and not yet production-ready.
 
 ![Local-RAG Preview](preview.png)
 
 ## Features
 
-- Ingest PDFs, DOCX, PPTX, XLSX, TXT and images (PNG, JPEG, TIFF, BMP, GIF).  
-- Convert files with Docling, then split markdown with a custom heading‑ and table‑aware chunker.  
-- Generate document summaries on ingest via a map‑reduce pipeline.  
-- Stream chat answers token‑by‑token, embedding inline citations `(filename)`.  
-- Extract cited sources and display them in a structured UI.  
-- Detect filename conflicts and provide an overwrite/re‑ingest workflow.  
-- Re‑ingest creates new chunks and automatically removes stale vectors from earlier generations.  
-- Process ingestion asynchronously using a background job queue with heartbeat logging.  
-- Harden against prompt injection through a strict instruction hierarchy, HTML escaping, and source‑tag isolation.  
-- Run entirely locally—no external API calls; all LLM inference, embeddings, and vector storage use Ollama and Qdrant.
+- **Broad file support** — ingest PDF, DOCX, PPTX, XLSX, TXT, and images (PNG, JPEG, TIFF, BMP, GIF).
+- **Structure-aware chunking** — convert with Docling, then split markdown with a custom heading- and table-aware chunker.
+- **Automatic summaries** — generate document summaries on ingest via a map-reduce pipeline.
+- **Streaming answers with citations** — stream responses token-by-token with inline `(filename)` citations, then extract and display the cited sources in a structured UI.
+- **Safe re-ingestion** — detect filename conflicts and offer an overwrite/re-ingest workflow; re-ingesting creates fresh chunks and automatically removes stale vectors from earlier generations.
+- **Async ingestion** — process uploads on a background job queue with heartbeat logging.
+- **Prompt-injection hardening** — enforce a strict instruction hierarchy with angle-bracket neutralization and source-tag isolation.
+- **Fully local** — no external API calls; all LLM inference, embeddings, and vector storage run on Ollama and Qdrant.
 
 ## Tech Stack
 
-- Document processing: Docling conversion plus custom markdown-aware chunking – PDFs, DOCX, PPTX, XLSX, TXT, images.
-- LLM & embeddings: Ollama (local) – gemma4:e4b for chat, bge-m3 for embeddings.
-- Vector store: Qdrant for similarity search on document embeddings.
-- Metadata storage – SQLite (async) for document info.
-- Backend: Python 3.11, FastAPI (async), Uvicorn.
-- Frontend: React 19, TypeScript, Vite, Tailwind CSS, TanStack React‑Query.
-- Deployment: Docker Compose (backend, frontend, Qdrant); Ollama runs separately as a local or reachable service.
+| Layer | Choice |
+| --- | --- |
+| Document processing | Docling conversion + custom markdown-aware chunking (PDF, DOCX, PPTX, XLSX, TXT, images) |
+| LLM & embeddings | Ollama (local) — `gemma4:e4b` for chat, `bge-m3` for embeddings |
+| Vector store | Qdrant (similarity search over document embeddings) |
+| Metadata store | SQLite (async) for document state |
+| Backend | Python 3.11, FastAPI (async), Uvicorn |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack React-Query |
+| Deployment | Docker Compose (backend, frontend, Qdrant); Ollama runs separately as a local or reachable service |
 
 ## Architecture
 
-*Ingestion Flow*
+**Ingestion flow**
 
 ```
 Upload → Sanitize → Docling Conversion → Markdown Chunking
@@ -39,7 +41,7 @@ Upload → Sanitize → Docling Conversion → Markdown Chunking
    └→ Summarize (LLM Map-Reduce) → SQLite (State Store)
 ```
 
-*Chat Flow*
+**Chat flow**
 
 ```
 User Query
@@ -59,33 +61,33 @@ Send Citations → SSE → Client (attaches to the completed answer)
 DONE
 ```
 
-## Getting started
+## Getting Started
 
 ### Prerequisites
 
-Before you begin, ensure you have the following installed:
+Make sure you have the following installed:
 
-*   **Docker & Docker Compose** (for running Qdrant, the backend, and the frontend)
-*   **Ollama** running locally or on a reachable network (models can be pulled separately).
-*   **Python 3.11** (if running the backend natively)
-*   **Node.js 18+ & npm**
+- **Docker & Docker Compose** — runs Qdrant, the backend, and the frontend.
+- **Ollama** — running locally or on a reachable network (models are pulled separately).
+- **Python 3.11** — only if running the backend natively.
+- **Node.js 18+ & npm** — only if running the frontend natively.
 
-#### Pull Required Ollama Models
+### 1. Pull the Ollama models
 
 ```bash
 ollama pull bge-m3:latest
 ollama pull gemma4:e4b
 ```
 
-#### Run Ollama
+### 2. Start Ollama
 
-Ensure the Ollama service is running (default `http://localhost:11434`). You can start it with:
+Ensure the Ollama service is running (default `http://localhost:11434`):
 
 ```bash
 ollama serve
 ```
 
-#### Then Run Qdrant, Backend & Frontend with Docker (recommended)
+### 3. Run Qdrant, backend & frontend with Docker (recommended)
 
 ```bash
 # Clone the repo
@@ -94,90 +96,99 @@ cd local-rag
 
 # Configure environment
 cp .env.example .env
-# Edit .env if needed — defaults work for most setups
-# Ollama must be reachable at the URL in OLLAMA_BASE_URL
+# Edit .env if needed — defaults work for most setups.
+# Ollama must be reachable at the URL in OLLAMA_BASE_URL.
 
 # Build and start Qdrant + backend + frontend
 docker compose up -d --build
-
-# Frontend runs on http://localhost:5173
-# Backend runs on http://localhost:8000
-# API docs at http://localhost:8000/docs
 ```
+
+Once it's up:
+
+| Service | URL |
+| --- | --- |
+| Frontend | http://localhost:5173 |
+| Backend | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
 
 > **Note:** Ollama must be running on your host machine. The backend connects to it via `host.docker.internal`.
 
 ## Configuration
 
-All configuration options are defined in `backend/app/core/config.py` and can be overridden via environment variables or a `.env` file.
+All options live in [`backend/app/core/config.py`](backend/app/core/config.py) and can be overridden via environment variables or a `.env` file.
 
-| Variable               | Default                    | Description                              |
-| ---                    | ---                        | ---                                      |
-| QDRANT_HOST            | `qdrant`                   | Qdrant host                              |
-| QDRANT_PORT            | `6333`                     | Qdrant port                              |
-| QDRANT_COLLECTION      | `documents`                | Qdrant collection                        |
-| OLLAMA_BASE_URL        | `http://localhost:11434`   | Ollama base URL                          |
-| EMBEDDING_MODEL        | `bge-m3:latest`            | Embedding model                          |
-| EMBEDDING_DIMENSIONS   | `1024`                     | Embedding vector size                    |
-| LLM_MODEL              | `gemma4:e4b`               | LLM model                                |
-| LLM_TEMPERATURE        | `0.1`                      | Sampling temperature                     |
-| LLM_TOP_P              | `0.9`                      | Top‑p sampling                           |
-| LLM_NUM_PREDICT        | `1024`                     | Max tokens to generate                   |
-| LLM_NUM_CTX            | `65536`                    | Model context window                     |
-| LLM_THINK              | `False`                    | Enable Ollama thinking mode              |
-| CHUNK_MAX_TOKENS       | `512`                      | Max tokens per chunk                     |
-| CHUNK_MIN_CONTENT_LENGTH | `120`                    | Minimum chunk content length             |
-| TOP_K                  | `8`                        | Number of nearest neighbours             |
-| MIN_SCORE              | `0.35`                     | Minimum similarity score                 |
-| MAX_FILE_SIZE_MB       | `100`                      | Max upload size (MB)                     |
-| DB_PATH                | `data/state.db`            | SQLite DB path                           |
-| TEMP_DIR               | `data/tmp`                 | Temporary files directory                |
-| LLM_TIMEOUT            | `900`                      | LLM request timeout (seconds)            |
-| EMBEDDING_TIMEOUT      | `600`                      | Embedding request timeout (seconds)      |
-| SUMMARY_MAP_BATCH_SIZE | `10`                       | Batch size for map‑reduce summarisation  |
+| Variable | Default | Description |
+| --- | --- | --- |
+| `QDRANT_HOST` | `qdrant` | Qdrant host |
+| `QDRANT_PORT` | `6333` | Qdrant port |
+| `QDRANT_COLLECTION` | `documents` | Qdrant collection |
+| `OLLAMA_BASE_URL` | `http://host.docker.internal:11434` | Ollama base URL (use `http://localhost:11434` when running the backend outside Docker) |
+| `EMBEDDING_MODEL` | `bge-m3:latest` | Embedding model |
+| `EMBEDDING_DIMENSIONS` | `1024` | Embedding vector size |
+| `LLM_MODEL` | `gemma4:e4b` | LLM model |
+| `LLM_TEMPERATURE` | `0.1` | Sampling temperature |
+| `LLM_TOP_P` | `0.9` | Top-p sampling |
+| `LLM_NUM_PREDICT` | `1024` | Max tokens to generate |
+| `LLM_NUM_CTX` | `65536` | Model context window |
+| `LLM_THINK` | `False` | Enable Ollama thinking mode |
+| `CHUNK_MAX_TOKENS` | `512` | Max tokens per chunk |
+| `CHUNK_MIN_CONTENT_LENGTH` | `120` | Minimum chunk content length |
+| `TOP_K` | `8` | Number of nearest neighbours |
+| `MIN_SCORE` | `0.35` | Minimum similarity score |
+| `MAX_FILE_SIZE_MB` | `100` | Max upload size (MB) |
+| `DB_PATH` | `data/state.db` | SQLite DB path |
+| `TEMP_DIR` | `data/tmp` | Temporary files directory |
+| `LLM_TIMEOUT` | `900` | LLM request timeout (seconds) |
+| `EMBEDDING_TIMEOUT` | `600` | Embedding request timeout (seconds) |
+| `SUMMARY_MAP_BATCH_SIZE` | `10` | Batch size for map-reduce summarisation |
 
 ## Backend Structure
 
 ```text
 backend/
-├─ app/
-│   ├─ main.py                # FastAPI entry point, sets up routers and dependencies
-│   ├─ core/
-│   │   └─ config.py          # Application settings (env vars/.env)
-│   ├─ api/
-│   │   └─ routes/
-│   │       ├─ chat.py        # Chat query endpoint (SSE streaming)
-│   │       └─ ingest.py      # Document upload, re‑ingest, status, deletion
-│   └─ services/
-│       ├─ rag_service.py                 # Retrieval‑augmented generation orchestration
-│       ├─ ingestion_service.py           # Document parsing, chunking, summarisation
-│       ├─ docling_service.py             # Docling integration for parsing various file types
-│       ├─ embedding_service.py           # Generate embeddings via Ollama model
-│       ├─ llm_service.py                 # Interact with LLM via Ollama, streaming responses
-│       ├─ qdrant_service.py              # Qdrant vector store CRUD operations
-│       ├─ citation_service.py            # Extract and deduplicate citations from answers
-│       └─ state.py                       # Persistent document state store (SQLite)
+└─ app/
+   ├─ main.py                 # FastAPI entry point; wires routers and dependencies
+   ├─ deps.py                 # Shared dependency providers
+   ├─ core/
+   │   ├─ config.py           # Application settings (env vars / .env)
+   │   ├─ exceptions.py       # Custom exception types
+   │   └─ logging.py          # Logging configuration
+   ├─ api/
+   │   └─ routes/
+   │       ├─ chat.py         # Chat query endpoint (SSE streaming)
+   │       └─ ingest.py       # Upload, re-ingest, list, status, delete
+   ├─ jobs/
+   │   └─ queue.py            # Background ingestion job queue
+   ├─ models/                 # Pydantic request/response schemas
+   └─ services/
+       ├─ rag_service.py         # Retrieval-augmented generation orchestration
+       ├─ ingestion_service.py   # Parsing, chunking, summarisation
+       ├─ docling_service.py     # Docling integration for parsing file types
+       ├─ embedding_service.py   # Generate embeddings via Ollama
+       ├─ llm_service.py         # LLM interaction via Ollama, streaming responses
+       ├─ qdrant_service.py      # Qdrant vector store CRUD
+       ├─ citation_service.py    # Extract and deduplicate citations
+       └─ state.py               # Persistent document state (SQLite)
 ```
 
 ## API Endpoints
 
 ### Documents
 
-| Method   | Path                                    | Description                                |
-| ---      | ---                                     | ---                                        |
-| POST     | `/api/documents/upload`                 | Upload a new document for ingestion        |
-| PUT      | `/api/documents/{document_id}/reingest` | Replace and re‑ingest an existing document |
-| GET      | `/api/documents`                        | List all documents with status             |
-| DELETE   | `/api/documents/{document_id}`          | Delete a document and its vector data      |
-| GET      | `/api/documents/{document_id}/status`   | Retrieve processing status of a document   |
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/api/documents/upload` | Upload a new document for ingestion |
+| PUT | `/api/documents/{document_id}/reingest` | Replace and re-ingest an existing document |
+| GET | `/api/documents` | List all documents with status |
+| DELETE | `/api/documents/{document_id}` | Delete a document and its vector data |
+| GET | `/api/documents/{document_id}/status` | Retrieve processing status of a document |
 
 ### Chat
 
-| Method   | Path                | Description                                                   |
-| ---      | ---                 | ---                                                           |
-| POST     | `/api/chat/query`   | Submit a question; returns SSE streaming tokens and citations |
+| Method | Path | Description |
+| --- | --- | --- |
+| POST | `/api/chat/query` | Submit a question; returns SSE streaming tokens and citations |
 
 ## License
 
-[CC‑BY‑SA‑4.0](https://creativecommons.org/licenses/by-sa/4.0/)
- 
+[MIT](LICENSE)

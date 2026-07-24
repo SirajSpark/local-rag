@@ -1,6 +1,5 @@
 import asyncio
 import hashlib
-import html
 import json
 from collections.abc import AsyncGenerator
 
@@ -371,7 +370,9 @@ class LLMService:
         # Only prevent tag-injection: escape < and > but NOT &
         # This preserves financial text like "& Storage", "decreased <9%"
         # while still blocking </SOURCE_CONTENT> injection attempts.
-        text = text.replace("<", "\u2039").replace(">", "\u203a")  # or use a sentinel
+        # Swap angle brackets for their single-guillemet lookalikes (\u2039 \u203a) so the
+        # text can't close our XML-style tags but still reads normally to the LLM.
+        text = text.replace("<", "\u2039").replace(">", "\u203a")
         return text
 
     def _sanitize_source_label(self, value: object) -> str:

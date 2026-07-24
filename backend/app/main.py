@@ -45,6 +45,9 @@ async def lifespan(app: FastAPI):
 
     state_store = StateStore(settings.DB_PATH)
     await state_store.open()
+    stale = await state_store.fail_stale_processing()
+    if stale:
+        logger.info("stale_processing_reconciled", extra={"count": stale})
 
     qdrant_service = QdrantService()
     embedding_service = EmbeddingService()
