@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "qdrant"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION: str = "documents"
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://host.docker.internal:11434"
     EMBEDDING_MODEL: str = "bge-m3:latest"
     EMBEDDING_DIMENSIONS: int = 1024
     LLM_MODEL: str = "gemma4:e4b"

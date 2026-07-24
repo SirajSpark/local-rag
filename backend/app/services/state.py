@@ -70,6 +70,22 @@ class StateStore:
             await self._conn.close()
             self._conn = None
 
+    async def fail_stale_processing(self) -> int:
+        """Mark every ``processing`` document as ``failed``; return the count.
+
+        Call once at startup: jobs live only in memory, so any document still
+        ``processing`` after a restart is orphaned and can never complete.
+        """
+        conn = self._require_conn()
+        async with self._write_lock:
+            cursor = await conn.execute(
+                "UPDATE documents SET data = json_set(data, '$.status', ?) "
+                "WHERE json_extract(data, '$.status') = ?",
+                (StatusEnum.FAILED.value, StatusEnum.PROCESSING.value),
+            )
+            await conn.commit()
+            return cursor.rowcount
+
     async def get_next_generation(self) -> int:
         """Return a monotonically increasing generation ID.
         Uses SQLite AUTOINCREMENT so the counter survives app restarts.

@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.deps import get_rag_service
-from app.models.chat import ChatRequest, ChatStreamEvent, CitationSource
+from app.models.chat import ChatRequest, ChatStreamEvent
 from app.services.citation_service import filter_cited_sources
 from app.services.rag_service import RAGService
 

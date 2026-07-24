@@ -30,16 +30,3 @@ class ChatStreamEvent(StrEnum):
     CITATIONS = "citations"
     ERROR = "error"
     DONE = "done"
-
-
-class CitationsPayload(BaseModel):
-    citations: list[CitationSource]
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class StreamResponse(BaseModel):
-    event: ChatStreamEvent
-    data: str
-
-    model_config = ConfigDict(from_attributes=True)
